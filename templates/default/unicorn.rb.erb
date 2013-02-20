@@ -1,0 +1,22 @@
+worker_processes 2
+working_directory "<%= node['redmine']['path'] %>"
+user "<%= node['redmine']['user'] %>", "<%= node['redmine']['group'] %>"
+ 
+preload_app true
+
+timeout 30
+
+listen "<%= "#{node['redmine']['path']}#{node['redmine']['unicorn_conf']['sock']}" %>", :backlog => 64
+
+pid "<%= "#{node['redmine']['path']}#{node['redmine']['unicorn_conf']['pid']}" %>"
+
+stderr_path "<%= "#{node['redmine']['path']}/shared/log/#{node['redmine']['unicorn_conf']['error_log']}" %>"
+stdout_path "<%= "#{node['redmine']['path']}/shared/log/#{node['redmine']['unicorn_conf']['access_log']}"%>"
+
+before_fork do |server, worker|
+  defined?(ActiveRecord::Base) and ActiveRecord::Base.connection.disconnect!
+end
+
+after_fork do |server, worker|
+  defined?(ActiveRecord::Base) and ActiveRecord::Base.establish_connection
+end

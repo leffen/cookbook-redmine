@@ -1,19 +1,17 @@
-<VirtualHost *:80>
-  ServerName <%= @params[:server_name] %>
-  ServerAlias <% @params[:server_aliases].each do |a| %><%= "#{a}" %> <% end %>
-  DocumentRoot <%= @params[:docroot] %>
+upstream redmine {
+  server unix:<%= node['redmine']['app_path']+node['redmine']['unicorn_conf']['sock']%> ;
+}
 
-  RailsBaseURI <%= @params[:docroot] %>
-  RailsEnv <%= @params[:rails_env] %>
+server {
+  listen <%= node['redmine']['nginx_listen'] %>;
+  server_name <%= node['redmine']['app_server_name'] %>;
 
-  <Directory <%= @params[:docroot] %>>
-    Options FollowSymLinks
-    AllowOverride None
-    Order allow,deny
-    Allow from all
-  </Directory>
-
-  LogLevel info
-  ErrorLog <%= node[:apache][:log_dir] %>/<%= @params[:name] %>-error.log
-  CustomLog <%= node[:apache][:log_dir] %>/<%= @params[:name] %>-access.log combined
-</VirtualHost>
+  location / {
+    root <%= node['redmine']['app_path']%>/public;
+    try_files $uri @redmine ;
+  }
+  
+  location @redmine {
+    proxy_pass http://redmine ;
+  }
+}

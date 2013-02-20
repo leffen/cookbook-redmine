@@ -1,0 +1,73 @@
+#!/bin/bash
+
+### BEGIN INIT INFO
+# Provides: unicorn4redmine 
+# Required-Start: $all
+# Required-Stop: $network $local_fs $syslog
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: Start the APPLICATION unicorns at boot
+# Description: Enable unicorn4redmine at boot time.
+### END INIT INFO
+
+set -u
+set -e
+declare -r APP_NAME="redmine-<%=node['redmine']['revision']%>"
+declare -r APP_ROOT="<%=node['redmine']['path']%>"
+declare -r PID="$APP_ROOT<%=node['redmine']['unicorn_conf']['pid']%>"
+declare -r ENV=production
+declare -r UNICORN_DIR="/usr/local"
+declare -r UNICORN_OPTS="-D -E $ENV -c $APP_ROOT/config/unicorn.rb"
+declare -r oldpid="$PID.oldbin"
+
+
+cd $APP_ROOT || exit 1
+
+run () {
+  cd $APP_ROOT && $UNICORN_DIR/bin/unicorn_rails $UNICORN_OPTS
+}
+
+sig () {
+  test -s "$PID" && kill -$1 `cat $PID`
+}
+
+oldsig() {
+  test -s "$oldpid" && kill -$1 `cat $oldpid`
+}
+
+case ${1-help} in
+    status)
+        sig 0 && echo "[Unicorn @ Redmine] running in $APP_ROOT pid `cat $PID` " && exit 0
+        echo "[Unicorn @ Redmine] stopped" && exit 0
+    ;;
+    start)
+        sig 0 && echo "[Unicorn @ redmine] already running" && exit 0
+        run && echo "[Unicorn @ Redmine] now up and running - OK"
+        exit
+    ;;
+    stop)
+        sig QUIT && echo "[Unicorn @ Redmine] stopped - OK" && exit 0 
+        echo >&2 "[Unicorn @ Redmine] already stopped"
+    ;;
+    force-stop)
+        sig TERM && exit 0
+        echo >&2 "Not running"
+    ;;
+    restart)
+        test -e "$PID" || (echo "[Unicorn @ Redmine] is apparently not running"  && exit 0 )
+        sig QUIT && echo "[Unicorn @ Redmine] restarting - OK" && sleep 3 && run && echo "[Unicorn @ Redmine] now up and running - OK" && exit 0
+    ;;
+    
+    reload)
+        sig USR2 && sleep 3 && oldsig QUIT && echo "[Unicorn @ Redmine] reloaded - OK" && exit 0
+        echo >&2 "[Unicorn @ Redmine] couldn't reload, restart required" && exit 1
+    ;;
+    rotate)
+        sig USR1 && echo "[Unicorn @ Redmine] rotated logs - OK" && exit 0
+        echo >&2 "[Unicorn @ Redmine] couldn't rotate logs" && exit 1
+    ;;
+    *)
+        echo "Usage: $0 <status|start|stop|restart|reload|rotate|force-stop>"
+        exit 1
+    ;;
+esac

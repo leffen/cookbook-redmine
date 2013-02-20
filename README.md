@@ -1,28 +1,19 @@
 Description
 ===========
 
-Installs the ticketing box with Redmine from the source.
+Install redmine with mysql, nginx and unicorn.
 
-The cookbook will install Redmine with MySql as a database adaptor and Apache2
-as a web server.
+This cookbook expects Ruby to be already installed on the server.
 
-### Notes for the current cookbook's version
-
-The current version only support MySql and it will be installed at the same
-node, but the recipe will take care of it. MySql and Apache2 will be installed
-by the recipe.
-You don't need to install it previously.
 
 Requirements
 ============
 
 ## Platform:
 
-Tested in:
+Tested on:
 
-* Debian (5.0 - Lenny)
-* Ubuntu (10.04 - Lucid and 11.10 - Oneiric)
-* CentOS (5.0)
+* Ubuntu 12.04
 
 ## Cookbooks:
 
@@ -30,25 +21,9 @@ Tested in:
 * yum
 * runit
 * git
-* apache2
-* passenger\_apache2
 * mysql
 * build-essential
 * openssl
-
-### Download the needed bookboks
-
-I you don't have the cookbooks on your local repo, this lines could do the task:
-
-    for cb in apt yum runit git apache2 passenger_apache2 mysql build-essential openssl ; do
-      knife cookbook site install $cb
-    done
-
-### Upload the Redmine cookbook and its depends
-
-Now you can upload the Redmine cookbook and its depends to the Chef server:
-
-    knife cookbook upload redmine -d
 
 
 Attributes
@@ -71,6 +46,10 @@ an example:
     run_list("recipe[redmine]")
     default_attributes(
       "redmine" => {
+        "path" => "/opt/redmine",
+        "user" => "deploy_user",
+        "group" => "deploy_group",
+        "rmagick" => "true",
         "databases" => {
           "production" => {
             "password" => "redmine_password"
@@ -78,12 +57,21 @@ an example:
         }
       },
       "mysql" => {
+        "server_root_password" => "SomeLongAndDifficultPassword",
+        "server_debian_password" => "SomeLongAndDifficultPasswordDebx",
+        "server_repl_password" => "SomeLongAndDifficultPasswordRepl",
+
         "server_root_password" => "supersecret_password"
       }
     )
 
 
-License and Author
+
+This cookbook is a fork from : https://github.com/juanje/cookbook-redmine
+Some of the content is also from https://github.com/umts/cookbook-redmine
+and https://github.com/lebedevdsl/redmine
+
+Original License and Author
 ==================
 
 Author:: Juanje Ojeda (<juanje.ojeda@gmail.com>)

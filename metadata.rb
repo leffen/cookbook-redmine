@@ -1,12 +1,12 @@
-maintainer       "Juanje Ojeda"
-maintainer_email "juanje.ojeda@gmail.com"
+maintainer       "Leffen"
+maintainer_email "leffen@gmail.com"
 license          "Apache 2.0"
 description      "Install Redmine from Github"
-version          "0.0.4"
+version          "0.0.1"
 
 recipe "redmine", "Install the Redmine application from the source"
 
-%w{ git apache2 passenger_apache2 mysql }.each do |dep|
+%w{ git mysql build-essential}.each do |dep|
   depends dep
 end
 

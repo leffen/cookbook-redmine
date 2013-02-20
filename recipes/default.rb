@@ -2,7 +2,7 @@
 # Cookbook Name:: redmine
 # Recipe:: default
 #
-# Copyright 2012, Juanje Ojeda <juanje.ojeda@gmail.com>
+# Copyright 2012, UMass Transit Service <transit-mis@admin.umass.edu>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,118 +15,125 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
 
-# set through recipes the base system
-case node['platform']
-when "redhat","centos","amazon","scientific","fedora","suse"
-  include_recipe "yum::epel"
-when "debian","ubuntu"
-  include_recipe "apt"
-end
+# Sources
+# https://github.com/juanje/cookbook-redmine
+# https://github.com/umts/cookbook-redmine
+#
+# Modified and adapted by Leif Terje Fonnes ( leffen@gmail.com), 2013
 
-include_recipe "apache2"
-include_recipe "apache2::mod_rewrite"
-include_recipe "passenger_apache2::mod_rails"
+
 include_recipe "mysql::server"
+include_recipe "build-essential"
 include_recipe "git"
 
+mysql_packages = case node['platform']
+                   when "centos", "redhat", "suse", "fedora", "scientific", "amazon"
+                     %w{mysql mysql-devel}
+                   when "ubuntu","debian"
+                     if debian_before_squeeze? || ubuntu_before_lucid?
+                       %w{mysql-client libmysqlclient15-dev}
+                     else
+                       %w{mysql-client libmysqlclient-dev}
+                     end
+                 end
 
-# install the dependencies
-packages = node['redmine']['packages'].values.flatten
-packages.each do |pkg|
-  package pkg
+mysql_packages.each do |pkg|
+  package pkg do
+    action :nothing
+  end.run_action(:install)
 end
 
-node['redmine']['gems'].each_pair do |gem,ver|
-  gem_package gem do
-    action :install
-    version ver if ver && ver.length > 0
-  end
+chef_gem "mysql"
+
+db = node['redmine']['databases']
+rmversion = node['redmine']['revision'].to_i
+
+mysql_connection = { :host => "localhost", :username => 'root', :password => node['mysql']['server_root_password'] }
+
+mysql_database db['database'] do
+  connection mysql_connection
+  action :create
 end
 
-
-# set up the database
-redmine_sql = '/tmp/redmine.sql'
-template redmine_sql do
-  source 'redmine.sql.erb'
-  variables(
-    :host => 'localhost',
-    :databases => node['redmine']['databases']
-  )
+mysql_database_user db['username'] do
+  password db['password']
+  database_name db['database']
+  connection mysql_connection
+  action :grant
 end
 
-execute "create redmine database" do
-  command "#{node['mysql']['mysql_bin']} -u root #{node['mysql']['server_root_password'].empty? ? '' : '-p' }\"#{node['mysql']['server_root_password']}\" < #{redmine_sql}"
-  action :nothing
-  subscribes :run, resources("template[#{redmine_sql}]"), :immediately
-  not_if { ::File.exists?("/var/lib/mysql/redmine") }
-end
+application "redmine" do
+  path node['redmine']['path']
+  owner node['redmine']['user']
+  group node['redmine']['group']
 
+  repository node['redmine']['repo']
+  revision   node['redmine']['revision']
 
-# set up the Apache site
-web_app "redmine" do
-  docroot        ::File.join(node['redmine']['path'], 'public')
-  template       "redmine.conf.erb"
-  server_name    "redmine.#{node['domain']}"
-  server_aliases [ "redmine", node['hostname'] ]
-  rails_env      node['redmine']['env']
-end
-
-# this is because is the only site. Otherwise it should be removed
-apache_site "000-default" do
-  enable false
-end
-
-# deploy the Redmine app
-deploy_revision node['redmine']['deploy_to'] do
-  repo     node['redmine']['repo']
-  revision node['redmine']['revision']
-  user     node['apache']['user']
-  group    node['apache']['group']
-  environment "RAILS_ENV" => node['redmine']['env']
-  shallow_clone true
-
-  before_migrate do
-    %w{config log system pids}.each do |dir|
-      directory "#{node['redmine']['deploy_to']}/shared/#{dir}" do
-        owner node['apache']['user']
-        group node['apache']['group']
-        mode '0755'
-        recursive true
-      end
-    end
-
-    template "#{node['redmine']['deploy_to']}/shared/config/database.yml" do
-      source "database.yml.erb"
-      owner node['redmine']['user']
-      group node['redmine']['group']
-      mode "644"
-      variables(
-        :host => 'localhost',
-        :databases => node['redmine']['databases'],
-        :rails_env => node['redmine']['env']
-      )
-    end
-
-    execute 'bundle install --without development test' do
-      cwd release_path
-    end
-
-    execute 'rake generate_session_store' do
-      cwd release_path
-      not_if { ::File.exists?("#{release_path}/db/schema.rb") }
-    end
-  end
+  packages node['redmine']['packages'].values.flatten
 
   migrate true
-  migration_command 'rake db:migrate'
+  rollback_on_error false
 
-  before_restart do
-    link node['redmine']['path'] do
-      to release_path
+  rails do
+    gems %w{ bundler }
+    bundler_without_groups %w{ postgresql sqlite3 }
+    bundler_deployment false
+    database do
+      adapter  db['adapter']
+      host     "localhost"
+      database db['database']
+      username db['username']
+      password db['password']
     end
   end
-  action :deploy
-  notifies :restart, "service[apache2]"
+
 end
+
+execute "default_data" do
+  command "bundle exec rake redmine:load_default_data"
+  environment ({'RAILS_ENV' => 'production', 'REDMINE_LANG' => 'en'})
+  cwd "#{node['redmine']['path']}/current"
+  action :run
+end
+
+execute 'bundle exec rake generate_session_store' do
+  cwd "#{node['redmine']['path']}/current"
+  not_if { ::File.exists?("#{node['redmine']['path']}/current/config/initializers/secret_token.rb") }
+end
+
+
+template "/etc/init.d/unicorn_redmine" do
+  source "unicorn_init_script.erb"
+  owner  "root"
+  group  "root"
+  mode   "0700"
+end
+
+# Redmine configuration for SCM and mailing
+template "#{node['redmine']['path']}/shared/config/configuration.yml" do
+  source "configuration.yml.erb"
+  owner "www-data"
+  group "www-data"
+  mode  "0644"
+end
+
+# Redmine unicorn configuration
+template "#{node['redmine']['path']}/shared/config/unicorn.rb" do
+  source "unicorn.rb.erb"
+  owner "www-data"
+  group "www-data"
+  mode  "0644"
+end
+
+template "/etc/nginx/sites-enabled/redmine.conf" do
+  source "redmine.conf.erb"
+
+
+  notifies :reload, resources(:service => "nginx")
+end
+
+
+
+

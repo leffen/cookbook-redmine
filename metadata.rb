@@ -6,7 +6,7 @@ version          "0.0.1"
 
 recipe "redmine", "Install the Redmine application from the source"
 
-%w{ git mysql build-essential}.each do |dep|
+%w{ git mysql build-essential database  application application_ruby nginx }.each do |dep|
   depends dep
 end
 

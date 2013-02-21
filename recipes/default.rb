@@ -24,8 +24,44 @@
 
 
 include_recipe "mysql::server"
+include_recipe "mysql::ruby"
 include_recipe "build-essential"
 include_recipe "git"
+include_recipe "nginx"
+
+
+
+group = node[:redmine][:group] || node[:redmine][:user]
+user =  node[:redmine][:user]
+config_dir =  "#{node['redmine']['path']}/shared/config"
+user_home = "/home/#{node[:redmine][:user]}"
+
+# Create group
+group group do
+  action :create
+end
+
+# Create user
+user user do
+  comment "Redmine service user"
+  home "/home/#{user}"
+  shell "/bin/bash"
+  group group
+  system true
+  action :create
+end
+
+
+# Ensure our directories exist
+[user_home,config_dir].each do |dir|
+  directory dir do
+    action :create
+    recursive true
+    owner user
+    group group
+    mode '0755'
+  end
+end
 
 mysql_packages = case node['platform']
                    when "centos", "redhat", "suse", "fedora", "scientific", "amazon"
@@ -43,8 +79,6 @@ mysql_packages.each do |pkg|
     action :nothing
   end.run_action(:install)
 end
-
-chef_gem "mysql"
 
 db = node['redmine']['databases']
 rmversion = node['redmine']['revision'].to_i
@@ -65,8 +99,8 @@ end
 
 application "redmine" do
   path node['redmine']['path']
-  owner node['redmine']['user']
-  group node['redmine']['group']
+  owner user
+  group group
 
   repository node['redmine']['repo']
   revision   node['redmine']['revision']
@@ -111,25 +145,35 @@ template "/etc/init.d/unicorn_redmine" do
   mode   "0700"
 end
 
+config_dir =  "#{node['redmine']['path']}/shared/config"
+
+# Ensure our directories exist
+directory "/home/#{node[:redmine][:user]}" do
+  action :create
+  recursive true
+  owner node[:redmine][:user]
+  group node[:redmine][:group]
+  mode '0755'
+end if node[:redmine][:user_home]
+
 # Redmine configuration for SCM and mailing
-template "#{node['redmine']['path']}/shared/config/configuration.yml" do
+template "#{config_dir}/configuration.yml" do
   source "configuration.yml.erb"
-  owner "www-data"
-  group "www-data"
+  owner user
+  group group
   mode  "0644"
 end
 
 # Redmine unicorn configuration
-template "#{node['redmine']['path']}/shared/config/unicorn.rb" do
+template "#{config_dir}/unicorn.rb" do
   source "unicorn.rb.erb"
-  owner "www-data"
-  group "www-data"
+  owner user
+  group group
   mode  "0644"
 end
 
 template "/etc/nginx/sites-enabled/redmine.conf" do
   source "redmine.conf.erb"
-
 
   notifies :reload, resources(:service => "nginx")
 end

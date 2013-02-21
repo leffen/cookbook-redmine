@@ -5,6 +5,7 @@ default["redmine"]["path"]      = '/var/www/redmine'
 default["redmine"]["user"]      = 'redmine'
 default["redmine"]["group"]     = 'redmine'
 
+
 # databases
 default["redmine"]["databases"]["adapter"]  = 'mysql2'
 default["redmine"]["databases"]["database"] = 'redmine'
@@ -13,6 +14,8 @@ default["redmine"]["databases"]["password"] = 'UltruxPlokk2345!'
 
 default["redmine"]["server_aliases"] = []
 
+default["redmine"]["nginx"]["port"] = "85"
+default["redmine"]["nginx"]["app_server_name"] = "redmine.sample.com"
 default["redmine"]["unicorn_conf"]["pid"] = "/tmp/pids/unicorn.pid"
 default["redmine"]["unicorn_conf"]["sock"] = "/tmp/sockets/unicorn.sock"
 default["redmine"]["unicorn_conf"]["error_log"] = "unicorn_redmine.error.log"

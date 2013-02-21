@@ -1,13 +1,13 @@
 upstream redmine {
-  server unix:<%= node['redmine']['app_path']+node['redmine']['unicorn_conf']['sock']%> ;
+  server unix:<%= node['redmine']['unicorn_conf']['sock']%> ;
 }
 
 server {
-  listen <%= node['redmine']['nginx_listen'] %>;
+  listen <%= node['redmine']['nginx']['port'] %>;
   server_name <%= node['redmine']['app_server_name'] %>;
 
   location / {
-    root <%= node['redmine']['app_path']%>/public;
+    root <%= node['redmine']['path']%>/current/public;
     try_files $uri @redmine ;
   }
   
